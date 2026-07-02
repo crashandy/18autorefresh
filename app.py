@@ -1,23 +1,25 @@
 import streamlit as st
 import os
 import subprocess
+import sys
 
-# 【全新加入：自動防呆機制】檢查雲端環境有沒有瀏覽器，沒有就自動下載
+# 【終極防呆機制】解決新版 chrome-headless-shell 找不到路徑的問題
 try:
     from playwright.sync_api import sync_playwright
 except ModuleNotFoundError:
     st.error("正在安裝基礎套件中，請稍候重新整理網頁...")
     st.stop()
 
-# 檢查 Playwright 瀏覽器是否已安裝，若未安裝則在背景執行安裝
-# Streamlit Cloud 的快取通常在 .cache/ms-playwright
+# 檢查 Playwright 瀏覽器是否真正就緒
 cache_path = os.path.expanduser("~/.cache/ms-playwright")
-if not os.path.exists(cache_path) or len(os.listdir(cache_path)) == 0:
-    with st.spinner("首次啟動：正在為「18度雞」監測器配置雲端瀏覽器環境（約需 1 分鐘）..."):
-        # 在背景自動執行 playwright install chromium
-        subprocess.run(["python", "-m", "playwright", "install", "chromium"])
-        st.success("環境配置成功！即將開始偵測...")
-
+# 如果快取資料夾不存在，或是裡面沒有新版 chromium_headless_shell，就觸發安裝
+if not os.path.exists(cache_path) or not any("chromium" in f or "shell" in f for f in os.listdir(cache_path)):
+    with st.spinner("首次啟動：正在為「18度雞」配置全新雲端瀏覽器環境（約需 1 分鐘）..."):
+        # 核心修正：同時安裝 chromium 與 chromium-headless-shell 確保路徑完全正確
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"])
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium-headless-shell"])
+        st.success("環境配置成功！請重新整理網頁以開始偵測。")
+        st.stop()
 # 引入其餘需要的套件
 from streamlit_autorefresh import st_autorefresh
 import time
