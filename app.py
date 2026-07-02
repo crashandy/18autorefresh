@@ -92,45 +92,39 @@ def check_dudoo_store():
             pass
         
         # --- 步驟 1：深度檢查所有分類與大品項 ---
+        # 先抓取網頁上完整的 HTML 原始碼字串
+        page_html = page.content()
+        
         for category, items in menu_database.items():
             item_status[category] = {}
             for item in items:
-                # 終極大絕招：直接用 XPath 尋找包含該商品名稱的最外層商品框
-                # 這裡會同時相容包含或不包含括號的精確文字比對
-                # 尋找含有該商品名字的 .mealItem 區塊
+                # 尋找商品名稱在網頁 HTML 原始碼中的位置
+                item_pos = page_html.find(item)
                 
-                # 1. 先用最精確的 XPath 抓取這個商品的整格框框
-                xpath_selector = f"//div[contains(@class, 'mealItem')][.//div[contains(text(), '{item}')] or .//pre[contains(text(), '{item}')]]"
-                meal_item_box = page.locator(xpath_selector).first
-                
-                if meal_item_box.count() > 0:
-                    class_attribute = meal_item_box.get_attribute("class") or ""
-                    inner_html = meal_item_box.inner_html() or ""
+                if item_pos != -1:
+                    # 🎯 核心邏輯：往前切片抓取包裹這個商品名稱的 <div class="mealItem ..."> 標籤內容
+                    # 我們往前抓 300 個字元，看看這隻商品的前面有沒有被加上 item-disabled
+                    prefix_html = page_html[max(0, item_pos-300):item_pos]
                     
-                    # 🎯 根據老闆提供的 HTML 特徵：
-                    # 如果 class 裡面有 item-disabled，或者格子內藏有 sold_out 的圖片，那就是售完！
-                    if "item-disabled" in class_attribute or "order_menu_sold_out" in inner_html:
-                        item_status[category][item] = "❌ 售完反黑"
-                    else:
-                        item_status[category][item] = "🟢 正常販售"
-                else:
-                    # 2. 備用機制：如果因為名字有括號(3入)等字眼導致 XPath 沒對準，用文字做二次確認
-                    backup_element = page.locator(f"text='{item}'").first
-                    if backup_element.count() > 0:
-                        try:
-                            # 嘗試往上找 5 層父元素，看看裡面有沒有包含 item-disabled
-                            parent_box = backup_element.locator(".. >> .. >> .. >> .. >> ..")
-                            parent_class = parent_box.get_attribute("class") or ""
-                            parent_html = parent_box.inner_html() or ""
-                            
-                            if "item-disabled" in parent_class or "order_menu_sold_out" in parent_html:
-                                item_status[category][item] = "❌ 售完反黑"
-                            else:
-                                item_status[category][item] = "🟢 正常販售"
-                        except:
+                    # 找尋離商品最近的前一個 <div class="mealItem
+                    start_box_pos = prefix_html.rfind('class="mealItem')
+                    
+                    if start_box_pos != -1:
+                        box_classes = prefix_html[start_box_pos:start_box_pos+100]
+                        
+                        # 根據老闆提供的特徵：如果前方的 class 裡面有 item-disabled，那就是售完！
+                        if "item-disabled" in box_classes:
+                            item_status[category][item] = "❌ 售完反黑"
+                        else:
                             item_status[category][item] = "🟢 正常販售"
                     else:
-                        item_status[category][item] = "🚫 完全未上架"
+                        # 備用容錯：如果在前後 300 字元內有售完圖標，也算售完
+                        if "order_menu_sold_out" in page_html[max(0, item_pos-200):item_pos+200]:
+                            item_status[category][item] = "❌ 售完反黑"
+                        else:
+                            item_status[category][item] = "🟢 正常販售"
+                else:
+                    item_status[category][item] = "🚫 完全未上架"
                     
         # --- 步驟 2：點入「原味鍋燒」檢查客製化連動標籤 ---
         rep_status = item_status["🍜 鍋燒意麵系列"].get(tag_representative_item, "")
