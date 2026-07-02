@@ -91,21 +91,41 @@ def check_dudoo_store():
         except:
             pass
         
-        # 檢查大品項
+        # --- 步驟 1：深度檢查所有分類與大品項 ---
         for category, items in menu_database.items():
             item_status[category] = {}
             for item in items:
+                # 尋找包含該商品名稱的 HTML 元素
                 element = page.locator(f"text='{item}'").first
                 if element.count() > 0:
-                    parent_text = element.locator(".. >> .. >> ..").inner_text()
-                    if "sold out" in parent_text.lower() or "已售完" in parent_text:
-                        item_status[category][item] = "❌ 售完反黑"
-                    else:
+                    try:
+                        # 🎯 老闆破關關鍵：精準往上爬抓取 .mealItem 這一層
+                        # 檢查它有沒有被加上 item-disabled 這個象徵缺貨的 class
+                        meal_item_box = element.locator("xpath=ancestor::div[contains(@class, 'mealItem')]")
+                        
+                        if meal_item_box.count() > 0:
+                            class_attribute = meal_item_box.get_attribute("class") or ""
+                            inner_html = meal_item_box.inner_html() or ""
+                            
+                            # 規則A：如果外框含有 item-disabled
+                            # 規則B：如果格子內含有 sold_out_48.png 的圖片網址
+                            if "item-disabled" in class_attribute or "order_menu_sold_out" in inner_html:
+                                item_status[category][item] = "❌ 售完反黑"
+                            else:
+                                item_status[category][item] = "🟢 正常販售"
+                        else:
+                            # 備用機制：如果找不到 mealItem 階層，改用文字容錯判斷
+                            parent_text = element.locator(".. >> .. >> ..").inner_text()
+                            if "sold out" in parent_text.lower() or "已售完" in parent_text:
+                                item_status[category][item] = "❌ 售完反黑"
+                            else:
+                                item_status[category][item] = "🟢 正常販售"
+                    except:
                         item_status[category][item] = "🟢 正常販售"
                 else:
                     item_status[category][item] = "🚫 完全未上架"
                     
-        # 檢查客製化連動標籤
+        # --- 步驟 2：點入「原味鍋燒」檢查客製化連動標籤 ---
         rep_status = item_status["🍜 鍋燒意麵系列"].get(tag_representative_item, "")
         if rep_status == "🟢 正常販售":
             try:
