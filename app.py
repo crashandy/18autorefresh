@@ -95,35 +95,42 @@ def check_dudoo_store():
         for category, items in menu_database.items():
             item_status[category] = {}
             for item in items:
-                # 尋找包含該商品名稱的 HTML 元素
-                element = page.locator(f"text='{item}'").first
-                if element.count() > 0:
-                    try:
-                        # 🎯 老闆破關關鍵：精準往上爬抓取 .mealItem 這一層
-                        # 檢查它有沒有被加上 item-disabled 這個象徵缺貨的 class
-                        meal_item_box = element.locator("xpath=ancestor::div[contains(@class, 'mealItem')]")
-                        
-                        if meal_item_box.count() > 0:
-                            class_attribute = meal_item_box.get_attribute("class") or ""
-                            inner_html = meal_item_box.inner_html() or ""
-                            
-                            # 規則A：如果外框含有 item-disabled
-                            # 規則B：如果格子內含有 sold_out_48.png 的圖片網址
-                            if "item-disabled" in class_attribute or "order_menu_sold_out" in inner_html:
-                                item_status[category][item] = "❌ 售完反黑"
-                            else:
-                                item_status[category][item] = "🟢 正常販售"
-                        else:
-                            # 備用機制：如果找不到 mealItem 階層，改用文字容錯判斷
-                            parent_text = element.locator(".. >> .. >> ..").inner_text()
-                            if "sold out" in parent_text.lower() or "已售完" in parent_text:
-                                item_status[category][item] = "❌ 售完反黑"
-                            else:
-                                item_status[category][item] = "🟢 正常販售"
-                    except:
+                # 終極大絕招：直接用 XPath 尋找包含該商品名稱的最外層商品框
+                # 這裡會同時相容包含或不包含括號的精確文字比對
+                # 尋找含有該商品名字的 .mealItem 區塊
+                
+                # 1. 先用最精確的 XPath 抓取這個商品的整格框框
+                xpath_selector = f"//div[contains(@class, 'mealItem')][.//div[contains(text(), '{item}')] or .//pre[contains(text(), '{item}')]]"
+                meal_item_box = page.locator(xpath_selector).first
+                
+                if meal_item_box.count() > 0:
+                    class_attribute = meal_item_box.get_attribute("class") or ""
+                    inner_html = meal_item_box.inner_html() or ""
+                    
+                    # 🎯 根據老闆提供的 HTML 特徵：
+                    # 如果 class 裡面有 item-disabled，或者格子內藏有 sold_out 的圖片，那就是售完！
+                    if "item-disabled" in class_attribute or "order_menu_sold_out" in inner_html:
+                        item_status[category][item] = "❌ 售完反黑"
+                    else:
                         item_status[category][item] = "🟢 正常販售"
                 else:
-                    item_status[category][item] = "🚫 完全未上架"
+                    # 2. 備用機制：如果因為名字有括號(3入)等字眼導致 XPath 沒對準，用文字做二次確認
+                    backup_element = page.locator(f"text='{item}'").first
+                    if backup_element.count() > 0:
+                        try:
+                            # 嘗試往上找 5 層父元素，看看裡面有沒有包含 item-disabled
+                            parent_box = backup_element.locator(".. >> .. >> .. >> .. >> ..")
+                            parent_class = parent_box.get_attribute("class") or ""
+                            parent_html = parent_box.inner_html() or ""
+                            
+                            if "item-disabled" in parent_class or "order_menu_sold_out" in parent_html:
+                                item_status[category][item] = "❌ 售完反黑"
+                            else:
+                                item_status[category][item] = "🟢 正常販售"
+                        except:
+                            item_status[category][item] = "🟢 正常販售"
+                    else:
+                        item_status[category][item] = "🚫 完全未上架"
                     
         # --- 步驟 2：點入「原味鍋燒」檢查客製化連動標籤 ---
         rep_status = item_status["🍜 鍋燒意麵系列"].get(tag_representative_item, "")
