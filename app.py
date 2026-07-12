@@ -1,5 +1,6 @@
 import streamlit as st
-import requests
+import urllib.request
+import ssl
 from streamlit_autorefresh import st_autorefresh
 
 # 設定網頁標題與風格
@@ -50,83 +51,71 @@ required_sub_tags = [
 ]
 # ==============================================================
 
-def check_dudoo_api():
-    # 直接跟肚肚的後台資料庫 API 通訊，拿最原始的菜單 JSON 資料
-    api_url = "https://store.dudooeat.com/api/v2/menu/c5e254b96f03475e967c6a96225173e3"
+def check_dudoo_via_html():
+    url = "https://store.dudooeat.com/orderv2/menu/c5e254b96f03475e967c6a96225173e3"
     
+    # 模擬真實瀏覽器的 Header，繞過部分的阻擋機制
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://store.dudooeat.com/"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    response = requests.get(api_url, headers=headers)
-    data = response.json()
+    # 忽略 SSL 憑證檢查，防止雲端伺服器握手失敗
+    context = ssl._create_unverified_context()
     
-    # 建立快速尋找字典，把所有線上品項抽出來
-    online_meals = {}
-    online_variants = {}
-    
-    # 解析肚肚的資料結構 (這一步包含了點進去的所有子選單標籤)
-    for category in data.get("data", {}).get("menuCategories", []):
-        for meal in category.get("meals", []):
-            meal_name = meal.get("name", "").strip()
-            # 判斷大品項是否被停用 (isAvailable) 或刪除
-            is_available = meal.get("isAvailable", True)
-            is_sold_out = meal.get("isSoldOut", False)
-            
-            if not is_available or is_sold_out:
-                online_meals[meal_name] = "❌ 售完反黑"
-            else:
-                online_meals[meal_name] = "🟢 正常販售"
-                
-            # 撈出這道菜裡面的加選標籤（客製化選項）
-            for g in meal.get("modifierGroups", []):
-                for m in g.get("modifiers", []):
-                    mod_name = m.get("name", "").strip()
-                    mod_avail = m.get("isAvailable", True)
-                    mod_sold = m.get("isSoldOut", False)
-                    if not mod_avail or mod_sold:
-                        online_variants[mod_name] = "售完"
-                    else:
-                        online_variants[mod_name] = "有貨"
-                        
-    # 比對我們自己的資料庫
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, context=context) as response:
+        # 讀取網頁完整的網頁原始碼並轉成文字字串
+        page_html = response.read().decode('utf-8')
+        
     item_status = {}
-    for cat, items in menu_database.items():
-        item_status[cat] = {}
-        for item in items:
-            # 模糊比對，避免因為多了(3入)或空格對不準
-            matched_key = None
-            for online_name in online_meals.keys():
-                if item in online_name or online_name in item:
-                    matched_key = online_name
-                    break
-            
-            if matched_key:
-                item_status[cat][item] = online_meals[matched_key]
-            else:
-                item_status[cat][item] = "🚫 完全未上架"
-                
-    # 檢查鍋燒意麵配料標籤
     missing_tags = []
-    for tag in required_sub_tags:
-        matched_tag_key = None
-        for online_tag in online_variants.keys():
-            if tag in online_tag or online_tag in tag:
-                matched_tag_key = online_tag
-                break
-                
-        if not matched_tag_key:
-            missing_tags.append(f"{tag} (後台未勾選/遺失)")
-        elif online_variants[matched_tag_key] == "售完":
-            missing_tags.append(f"{tag} (顯示售完)")
+    
+    # --- 步驟 1：運用您測試成功的純字串切片大絕招，檢查大品項 ---
+    for category, items in menu_database.items():
+        item_status[category] = {}
+        for item in items:
+            item_pos = page_html.find(item)
             
+            if item_pos != -1:
+                # 往回切片看包裹它的 <div class="mealItem">
+                prefix_html = page_html[max(0, item_pos-400):item_pos]
+                start_box_pos = prefix_html.rfind('class="mealItem')
+                
+                if start_box_pos != -1:
+                    box_classes = prefix_html[start_box_pos:start_box_pos+120]
+                    # 精確命中您提供的 html 缺貨特徵：item-disabled
+                    if "item-disabled" in box_classes:
+                        item_status[category][item] = "❌ 售完反黑"
+                    else:
+                        item_status[category][item] = "🟢 正常販售"
+                else:
+                    # 容錯機制
+                    if "order_menu_sold_out" in page_html[max(0, item_pos-200):item_pos+200]:
+                        item_status[category][item] = "❌ 售完反黑"
+                    else:
+                        item_status[category][item] = "🟢 正常販售"
+            else:
+                item_status[category][item] = "🚫 完全未上架"
+                
+    # --- 步驟 2：檢查內頁客製化標籤 ---
+    # 因為沒有瀏覽器點擊，我們直接在全網頁 HTML 中搜尋客製化標籤的文字
+    # 肚肚系統的客製化標籤如果售完，通常會在該標籤的原始碼附近出現 "disabled" 或 "sold-out"
+    for tag in required_sub_tags:
+        tag_pos = page_html.find(tag)
+        if tag_pos == -1:
+            missing_tags.append(f"{tag} (後台未勾選/遺失)")
+        else:
+            # 檢查標籤文字前後 150 個字元內有沒有包含售完或停用特徵
+            tag_surrounding = page_html[max(0, tag_pos-150):tag_pos+150]
+            if "sold" in tag_surrounding.lower() or "disabled" in tag_surrounding.lower():
+                missing_tags.append(f"{tag} (顯示售完)")
+                
     return item_status, missing_tags
 
 # ==================== 網頁前端介面呈現 ====================
-with st.spinner("🔄 正在透過肚肚 API 快速巡檢「18度雞」狀態..."):
+with st.spinner("🔄 正在透過安全文字通道巡檢「18度雞」點餐畫面..."):
     try:
-        store_results, tag_results = check_dudoo_api()
+        store_results, tag_results = check_dudoo_via_html()
         
         # 統計異常
         total_missing_items = 0
@@ -188,4 +177,4 @@ with st.spinner("🔄 正在透過肚肚 API 快速巡檢「18度雞」狀態...
                             st.markdown(f"**{status} ｜ {item}**")
                             
     except Exception as e:
-        st.error(f"❌ API 偵測連線失敗。錯誤訊息：{e}")
+        st.error(f"❌ 偵測系統連線失敗。錯誤訊息：{e}")
