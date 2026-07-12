@@ -1,2 +1,3 @@
 streamlit
 streamlit-autorefresh
+greenlet==3.0.3
