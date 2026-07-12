@@ -8,16 +8,17 @@ st.set_page_config(page_title="18度雞 品項監測系統", page_icon="🐔", l
 st.title("🐔 18度雞 雲端點餐監測系統")
 st.subheader("即時監測：店製品項販售狀態 & 鍋燒連動標籤")
 
-# 【終極動態防呆】完全避開 requirements.txt 衝突錯誤
+# 【動態防呆機制】安全下載 playwright 模組
 try:
     from playwright.sync_api import sync_playwright
 except ModuleNotFoundError:
-    with st.spinner("首次啟動：正在為「18度雞」安裝核心偵測套件（約需 30 秒）..."):
-        subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.44.0"])
+    with st.spinner("首次啟動：正在為「18度雞」安裝偵測核心模組（約需 20 秒）..."):
+        # 加上 --only-binary=:all: 參數，強制全數下載現成檔案，絕對不進行現場編譯，避免 Wheel 錯誤
+        subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.44.0", "--only-binary=:all:"])
     st.success("核心套件安裝成功！正在重新載入系統...")
     st.rerun()
 
-# 檢查 Playwright 瀏覽器是否真正就緒
+# 檢查 Playwright 瀏覽器核心是否真正就緒
 cache_path = os.path.expanduser("~/.cache/ms-playwright")
 if not os.path.exists(cache_path) or not any("chromium" in f or "shell" in f for f in os.listdir(cache_path)):
     with st.spinner("首次啟動：正在下載雲端瀏覽器核心（約需 1 分鐘）..."):
@@ -25,7 +26,7 @@ if not os.path.exists(cache_path) or not any("chromium" in f or "shell" in f for
         st.success("瀏覽器環境配置成功！")
         st.rerun()
 
-# --- 環境完全就緒，正式進入 18度雞 監測邏輯 ---
+# --- 後續維持不變，接續原本的引入、18度雞資料庫與 check_dudoo_store 函數 ---
 from playwright.sync_api import sync_playwright
 from streamlit_autorefresh import st_autorefresh
 import time
