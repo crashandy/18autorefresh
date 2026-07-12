@@ -8,14 +8,16 @@ st.set_page_config(page_title="18度雞 品項監測系統", page_icon="🐔", l
 st.title("🐔 18度雞 雲端點餐監測系統")
 st.subheader("即時監測：店製品項販售狀態 & 鍋燒連動標籤")
 
-# 【動態防呆機制】安全下載新版 playwright 模組
+# 【動態防呆升級】直接在程式內安裝符合環境的 greenlet 與 playwright，避免系統快取衝突
 try:
     from playwright.sync_api import sync_playwright
 except ModuleNotFoundError:
-    with st.spinner("首次啟動：正在為「18度雞」安裝最新偵測核心（約需 20 秒）..."):
-        # 升級至 1.46.0 並加上 --only-binary=:all: 拒絕現場編譯，保證過關
+    with st.spinner("首次啟動：正在配置「18度雞」專用雲端環境（約需 30 秒）..."):
+        # 1. 先強行下載符合最新 Python 環境的 greenlet 現成包
+        subprocess.run([sys.executable, "-m", "pip", "install", "greenlet>=3.3.0", "--only-binary=:all:"])
+        # 2. 再下載最新的相容版 playwright
         subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.46.0", "--only-binary=:all:"])
-    st.success("核心套件安裝成功！正在重新載入系統...")
+    st.success("環境安裝成功！正在重新載入系統...")
     st.rerun()
 
 # 檢查 Playwright 瀏覽器核心是否真正就緒
