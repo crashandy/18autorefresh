@@ -8,13 +8,13 @@ st.set_page_config(page_title="18度雞 品項監測系統", page_icon="🐔", l
 st.title("🐔 18度雞 雲端點餐監測系統")
 st.subheader("即時監測：店製品項販售狀態 & 鍋燒連動標籤")
 
-# 【動態防呆機制】安全下載 playwright 模組
+# 【動態防呆機制】安全下載新版 playwright 模組
 try:
     from playwright.sync_api import sync_playwright
 except ModuleNotFoundError:
-    with st.spinner("首次啟動：正在為「18度雞」安裝偵測核心模組（約需 20 秒）..."):
-        # 加上 --only-binary=:all: 參數，強制全數下載現成檔案，絕對不進行現場編譯，避免 Wheel 錯誤
-        subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.44.0", "--only-binary=:all:"])
+    with st.spinner("首次啟動：正在為「18度雞」安裝最新偵測核心（約需 20 秒）..."):
+        # 升級至 1.46.0 並加上 --only-binary=:all: 拒絕現場編譯，保證過關
+        subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.46.0", "--only-binary=:all:"])
     st.success("核心套件安裝成功！正在重新載入系統...")
     st.rerun()
 
