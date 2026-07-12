@@ -8,15 +8,13 @@ st.set_page_config(page_title="18度雞 品項監測系統", page_icon="🐔", l
 st.title("🐔 18度雞 雲端點餐監測系統")
 st.subheader("即時監測：店製品項販售狀態 & 鍋燒連動標籤")
 
-# 【動態防呆升級】直接在程式內安裝符合環境的 greenlet 與 playwright，避免系統快取衝突
+# 【終極權限防呆】加上 --user 參數，強制安裝在擁有完全讀寫權限的使用者目錄下
 try:
     from playwright.sync_api import sync_playwright
 except ModuleNotFoundError:
-    with st.spinner("首次啟動：正在配置「18度雞」專用雲端環境（約需 30 秒）..."):
-        # 1. 先強行下載符合最新 Python 環境的 greenlet 現成包
-        subprocess.run([sys.executable, "-m", "pip", "install", "greenlet>=3.3.0", "--only-binary=:all:"])
-        # 2. 再下載最新的相容版 playwright
-        subprocess.run([sys.executable, "-m", "pip", "install", "playwright==1.46.0", "--only-binary=:all:"])
+    with st.spinner("首次啟動：正在繞過雲端權限配置「18度雞」環境（約需 30 秒）..."):
+        # 🎯 破關核心：使用 --user 避免覆寫唯讀的系統資料夾，並加上 --no-cache-dir 徹底沖刷舊錯誤
+        subprocess.run([sys.executable, "-m", "pip", "install", "greenlet>=3.3.0", "playwright==1.46.0", "--user", "--only-binary=:all:", "--no-cache-dir"])
     st.success("環境安裝成功！正在重新載入系統...")
     st.rerun()
 
